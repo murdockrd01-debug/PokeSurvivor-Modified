@@ -1,0 +1,108 @@
+
+name: Build PokeSurvivor APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install build tools
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Prepare Android project
+        run: |
+          mkdir -p app/src/main/assets app/src/main/java/com/example/pokesurvivor
+          cp index.html app/src/main/assets/
+          cp -r assets app/src/main/assets/ 2>/dev/null || true
+          cp -r css app/src/main/assets/ 2>/dev/null || true
+          cp -r js app/src/main/assets/ 2>/dev/null || true
+          cp -r images app/src/main/assets/ 2>/dev/null || true
+          cp -r sounds app/src/main/assets/ 2>/dev/null || true
+          cat > settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "PokeSurvivor"
+          include ':app'
+          EOF
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.6.1' apply false
+          }
+          EOF
+          cat > app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android {
+              namespace 'com.example.pokesurvivor'
+              compileSdk 35
+              defaultConfig {
+                  applicationId 'com.example.pokesurvivor'
+                  minSdk 23
+                  targetSdk 28
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="PokeSurvivor" android:usesCleartextTraffic="true">
+                  <activity android:name=".MainActivity" android:screenOrientation="landscape" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          cat > app/src/main/java/com/example/pokesurvivor/MainActivity.java <<'EOF'
+          package com.example.pokesurvivor;
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.webkit.WebView;
+          import android.webkit.WebSettings;
+          import android.view.View;
+          public class MainActivity extends Activity {
+              @Override public void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  getWindow().getDecorView().setSystemUiVisibility(5894 | 1024 | 512);
+                  WebView w = new WebView(this);
+                  WebSettings s = w.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);
+                  w.setWebViewClient(new android.webkit.WebViewClient());
+                  setContentView(w);
+                  w.loadUrl("file:///android_asset/index.html");
+              }
+          }
+          EOF
+
+      - name: Build APK
+        run: |
+          gradle wrapper --gradle-version 8.7
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PokeSurvivor-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
