@@ -1,4 +1,4 @@
-# PokéSurvivor · Mundo Misterioso
+# PokéSurvivor · Mundo Misterioso Para android
 
 Bullet-heaven con Pokémon al estilo de Survivor.io y Megabonk, con sprites de
 *Pokémon Mundo Misterioso*, capa roguelike, **966 Pokémon de las 9 generaciones**,
@@ -20,18 +20,6 @@ HTML + CSS + JavaScript vanilla sobre Canvas 2D. Sin build, sin dependencias y
 > **I take no responsibility for any purchase, sale or investment** you make
 > with them, and nothing here is investment advice. The game is free and will
 > stay free.
-
-## Jugar
-
-Doble clic en `index.html`. Crea una cuenta o entra como invitado, haz el test
-de personalidad y a la mazmorra.
-
-| Tecla | Acción |
-|---|---|
-| `W` `A` `S` `D` / flechas | Moverse |
-| `1` `2` `3` `4` | Elegir el movimiento activo |
-| `Q` / `E` | Ciclar movimientos |
-| `Esc` / `P` | Pausa |
 
 **En móvil o tablet** (en horizontal): pon el dedo en cualquier sitio y arrastra
 para moverte (el joystick aparece donde tocas), toca un ataque de abajo para
