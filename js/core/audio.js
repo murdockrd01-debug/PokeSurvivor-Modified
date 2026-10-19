@@ -66,16 +66,6 @@ G.Audio = (() => {
   // En móvil, tocar la pantalla (pointerdown) no cuenta como gesto para el
   // sonido: sí levantar el dedo (pointerup / touchend). Se escuchan todos.
   for (const ev of ['pointerdown', 'pointerup', 'touchend', 'keydown']) addEventListener(ev, unlock, { capture: true });
-  
-  // Pausar el audio cuando el juego pasa a segundo plano.
-  document.addEventListener('visibilitychange', () => {
-    if (!ctx) return;
-
-    if (document.hidden) {
-      ctx.suspend().catch(() => {});
-    }
-  });
-
 
   function applyVolumes() {
     if (!ctx) return;
