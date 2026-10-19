@@ -33,8 +33,11 @@ G.Game = (() => {
     addEventListener('resize', resize);
     G.Touch.init(cv);
     // En móvil: al cambiar de app o girarlo en vertical, la partida se pausa.
-    document.addEventListener('visibilitychange', () => { if (document.hidden) autoPause(); });
-    G.RunUI.wirePause(() => { state = 'playing'; G.UI.hideAll(); }, quitRun);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { autoPause(); saveNow(); } });
+    // Cerrar la pestaña o el navegador a mitad de una run: se guarda cómo ibas (core/runsave.js).
+    addEventListener('pagehide', saveNow);
+    addEventListener('beforeunload', saveNow);
+    G.RunUI.wirePause(() => { state = 'playing'; G.UI.hideAll(); }, quitRun, saveAndExit);
     Backdrop.init();
     last = performance.now();
     requestAnimationFrame(loop);
@@ -84,11 +87,14 @@ G.Game = (() => {
 
   // ---------------- run ----------------
 
-  /** @param coop  { seed, host, members } para una partida en grupo */
-  function startRun(coop = null) {
+  /**
+   * @param coop  { seed, host, members } para una partida en grupo
+   * @param snap  partida guardada a medias (core/runsave.js): la recupera en vez de empezar de cero
+   */
+  function startRun(coop = null, snap = null) {
     holdBy = []; awayBy = null;
     const save = G.DB.save;
-    const mon = G.DEX_BY[save.partner];
+    const mon = G.DEX_BY[snap ? snap.player.dex : save.partner];
     const perks = G.Upgrades.perks(G.DB.upgradesOf(mon.dex));
 
     G.UI.hideAll();
@@ -105,26 +111,36 @@ G.Game = (() => {
     G.Weather.reset();
     G.Path.clear();
     G.Hazards.clear();
-    G.World.reset(coop ? coop.seed : Math.floor(Math.random() * 1e6));
-    G.World.setBiome(0, true);
-    biome = 0;
-    time = 0; pendingLevels = 0;
-    runReal = performance.now(); tampered = false;
+    G.World.reset(coop ? coop.seed : snap ? snap.seed : Math.floor(Math.random() * 1e6));
+    biome = snap ? Math.floor(snap.time / 240) : 0;
+    G.World.setBiome(biome, true);
+    time = snap ? snap.time : 0; pendingLevels = snap ? Math.max(0, snap.pending | 0) : 0;
+    // Una partida recuperada no entra en el ranking (clean() la descarta).
+    runReal = performance.now(); tampered = !!snap; deadCleared = false; saveT = 0;
+    if (snap) { G.Enemies.importRun(snap.enemies); G.Spawner.importRun(snap.spawner); }
 
-    pl = new G.Player(mon, perks, !!save.partnerShiny && G.DB.ownsShiny(mon.dex));
+    pl = new G.Player(mon, perks, snap ? !!snap.player.shiny && G.DB.ownsShiny(mon.dex) : !!save.partnerShiny && G.DB.ownsShiny(mon.dex));
     banked = { t1: 0, t10: 0 };
     caught = [];
-    // Atajos: movimientos con hueco fijo (save.pbind[dex] = [id del 1, id del 2, ...]),
-    // antes de aprender nada: addMove ya los coloca.
-    (save.pbind && save.pbind[mon.dex] || []).forEach((id, i) => { if (id) pl.bind[id] = i; });
-    pl.addMove(G.startMoveOf(mon.dex));
-    // Mejora "Veto": movimientos que no quieres que te salgan.
-    pl.banned = new Set((save.pban && save.pban[mon.dex] || []).slice(0, perks.bans));
-    // Mejora "Repertorio": un segundo movimiento de ataque al azar.
-    if (perks.startMoves >= 2) {
-      const pool = G.Moves.poolFor(mon).filter(id => !pl.hasMove(id) && !pl.banned.has(id) && G.Moves.BY_ID[id].kind !== 'buff');
-      if (pool.length) pl.addMove(G.U.pick(pool));
-      pl.setActive(0);
+    if (snap) {
+      // Partida recuperada: tu Pokémon tal como estaba.
+      pl.importRun(snap.player);
+      banked = { t1: pl.t1, t10: pl.t10 };          // esos tickets ya estaban guardados en la cuenta
+      caught = Array.isArray(snap.caught) ? snap.caught.slice() : [];
+      placeAt(pl.x, pl.y);
+    } else {
+      // Atajos: movimientos con hueco fijo (save.pbind[dex] = [id del 1, id del 2, ...]),
+      // antes de aprender nada: addMove ya los coloca.
+      (save.pbind && save.pbind[mon.dex] || []).forEach((id, i) => { if (id) pl.bind[id] = i; });
+      pl.addMove(G.startMoveOf(mon.dex));
+      // Mejora "Veto": movimientos que no quieres que te salgan.
+      pl.banned = new Set((save.pban && save.pban[mon.dex] || []).slice(0, perks.bans));
+      // Mejora "Repertorio": un segundo movimiento de ataque al azar.
+      if (perks.startMoves >= 2) {
+        const pool = G.Moves.poolFor(mon).filter(id => !pl.hasMove(id) && !pl.banned.has(id) && G.Moves.BY_ID[id].kind !== 'buff');
+        if (pool.length) pl.addMove(G.U.pick(pool));
+        pl.setActive(0);
+      }
     }
 
     if (coop) {
@@ -134,12 +150,61 @@ G.Game = (() => {
     G.Camera.x = pl.x; G.Camera.y = pl.y; G.Camera.shake = 0;
     // Hojas de sprites locales: el compañero y los primeros enemigos.
     G.Sprites.preload([mon.dex], 8000, pl.shiny);
-    G.Audio.music(G.BIOME_MUSIC[0]);
+    G.Audio.music(G.BIOME_MUSIC[biome % G.BIOME_MUSIC.length]);
     // Para el ranking: el servidor apunta cuándo empieza la partida (anti-trampas).
-    if (!coop || G.Coop.isHost) G.Ranking.runStarted(coop ? 'g' : 's');
+    if (!snap && (!coop || G.Coop.isHost)) G.Ranking.runStarted(coop ? 'g' : 's');
     deathT = 0;
+    if (snap) {
+      G.Sprites.preload(G.Enemies.upcomingDex(time, 80));
+      pl.invuln = 2.5;                              // un respiro al volver
+      G.Spawner.say('Partida recuperada', 3);
+    }
 
     state = 'playing';
+  }
+
+  // ---------------- guardar la partida a medias (core/runsave.js) ----------------
+
+  let saveT = 0, deadCleared = false;
+
+  /** Sólo en solitario y con cuenta, y no dentro de la grieta ni de las Ruinas del Juicio. */
+  function canSave() {
+    return !!pl && !pl.dead && !G.Coop.active && !G.DB.guest && G.DB.loggedIn &&
+      !G.Rift.inArena && !G.Judgment.active && !G.Judgment.cinematic &&
+      (state === 'playing' || state === 'paused' || state === 'levelup' || state === 'choice');
+  }
+
+  function saveNow() {
+    if (!canSave()) return false;
+    try {
+      return G.RunSave.save({
+        time,
+        pending: pendingLevels + (state === 'levelup' ? 1 : 0),     // la carta abierta sin elegir vuelve a salir
+        seed: G.World.getSeed(), caught: caught.slice(),
+        player: pl.exportRun(), enemies: G.Enemies.exportRun(), spawner: G.Spawner.exportRun()
+      });
+    } catch (e) { console.warn('[Game] no se pudo guardar la partida a medias:', e); return false; }
+  }
+
+  /** Pausa → "Guardar y salir": se guarda y vuelves al menú sin acabar la run. */
+  function saveAndExit() {
+    if (!saveNow()) { G.UI.toast('No se puede guardar ahora mismo', 2800); return; }
+    G.UI.hideAll();
+    G.Audio.sfx('back'); G.Audio.music(null);
+    state = 'ui'; Backdrop.restore(); pl = null;
+    G.UI.toast('Partida guardada', 2200);
+    G.Flow.goMenu();
+  }
+
+  /** Deja a tu Pokémon en su sitio guardado (o en el hueco libre más cercano: las rocas rotas vuelven). */
+  function placeAt(x, y) {
+    for (let d = 0; d <= 320; d += 16) {
+      for (let i = 0, n = d ? 12 : 1; i < n; i++) {
+        const a = i / n * 6.2832, px = x + Math.cos(a) * d, py = y + Math.sin(a) * d;
+        if (G.World.isFree(px, py, 14)) { pl.x = px; pl.y = py; return; }
+      }
+    }
+    pl.x = x; pl.y = y;
   }
 
   function quitRun() {
@@ -282,6 +347,7 @@ G.Game = (() => {
 
   function endRun(dead = true) {
     if (state === 'over' || !pl) return;
+    G.RunSave.clear();                          // la run ya acabó: nada que recuperar
     const coop = !!pl.uid;                    // sólo las partidas en grupo le ponen uid
     const wasHost = !!pl.coopHost;
     const team = coop ? G.Coop.members.slice() : [];
@@ -624,6 +690,7 @@ G.Game = (() => {
     // Tras caer, deja que se vea la animación de Faint antes del resumen.
     // (En la arena de la grieta no: allí caer sólo te echa de vuelta.)
     if (pl.dead && !coop && !G.Rift.inArena) {
+      if (!deadCleared) { deadCleared = true; G.RunSave.clear(); }   // morir no se deshace cerrando el juego
       deathT += dt;
       pl.update(dt);
       G.EnemyMgr.update(dt * 0.3, pl);
@@ -674,6 +741,8 @@ G.Game = (() => {
     if (!coop || G.Coop.isHost) maybeLevelUp();
     if (pl.bonds > 0) offerBond(true);
     if (G.Coop.isHost) checkAllDown(dt);
+    saveT += dt;
+    if (saveT >= 8) { saveT = 0; saveNow(); }       // cada 8 s de juego
   }
 
   /** Caído en grupo: un compañero a tu lado te va levantando. */
@@ -937,7 +1006,23 @@ G.Flow = {
       G.LobbyUI.open();
     } else this.goMenu();
   },
-  play() { G.Game.startRun(); },
+  play() {
+    if (G.RunSave.has() && !confirm('Tienes una partida guardada. Si empiezas una nueva, la guardada se perderá. ¿Empezar de nuevo?')) return;
+    G.RunSave.clear();
+    G.Game.startRun();
+  },
+  /** Continúa la partida guardada a medias (core/runsave.js). */
+  resume() {
+    const snap = G.RunSave.load();
+    if (!snap) { G.UI.toast('No hay ninguna partida guardada'); G.MenuUI.open(); return; }
+    try { G.Game.startRun(null, snap); }
+    catch (e) {
+      console.error('[Flow] no se pudo recuperar la partida:', e);
+      G.RunSave.clear();
+      G.UI.toast('No se pudo recuperar la partida guardada', 4000);
+      this.goMenu();
+    }
+  },
   /** Empieza la partida en grupo (el anfitrión la manda a todos). */
   startCoop(cfg) {
     if (G.Game.state !== 'ui' || !G.Social.room) return;

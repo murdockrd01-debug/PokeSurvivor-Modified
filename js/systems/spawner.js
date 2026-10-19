@@ -179,6 +179,14 @@ G.Spawner = (() => {
   /** Invitado en cooperativo: sólo corre el reloj del aviso. */
   function tickBanner(dt) { if (announceT > 0) announceT -= dt; }
 
-  return { reset, update, ahead, burst, tickBanner, banner, say, rate, SHINY_RATE, CAP,
+  /** Por dónde va la run (jefes ya salidos y próxima marea), para guardarla a medias. */
+  function exportRun() { return { bossIdx, surgeT }; }
+  function importRun(s) {
+    if (!s) return;
+    bossIdx = Math.max(0, s.bossIdx | 0);
+    surgeT = Number.isFinite(+s.surgeT) ? Math.max(5, +s.surgeT) : 32;
+  }
+
+  return { reset, update, ahead, exportRun, importRun, burst, tickBanner, banner, say, rate, SHINY_RATE, CAP,
            debugForceShiny(n = 1) { forceShiny = n; } };
 })();

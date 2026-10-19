@@ -224,7 +224,14 @@ G.Enemies = (() => {
   }
 
   return {
-    TIERS, BOSS_SLOTS, rollRun, scale, bossScale, bagAt, upcomingDex, candidates, hordeTypes, hordeDefs,
+    TIERS, BOSS_SLOTS, rollRun, scale,
+    /** Elenco y jefes de esta run (para guardar la partida a medias: core/runsave.js). */
+    exportRun() { if (!cast) rollRun(); return { cast, bosses }; },
+    importRun(s) {
+      if (!s || !Array.isArray(s.cast) || !Array.isArray(s.bosses) || !s.cast.length) return false;
+      cast = s.cast; bosses = s.bosses;
+      return true;
+    }, bossScale, bagAt, upcomingDex, candidates, hordeTypes, hordeDefs,
     get BOSSES() { if (!bosses) rollRun(); return bosses; },
     get cast() { if (!cast) rollRun(); return cast; }
   };

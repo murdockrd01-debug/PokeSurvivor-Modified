@@ -89,11 +89,11 @@
       <div class="t2">Mundo Misterioso</div>
     </div>
     <p class="login-tag">Sobrevive a las hordas con tu compañero Pokémon · gratis, en PC y móvil</p>
+    <p class="login-official">Web oficial: pokesurvivor.com · si alguien te pide pagar, no somos nosotros</p>
     <div class="tabs">
       <div class="tab on" data-tab="login">Entrar</div>
       <div class="tab" data-tab="register">Crear cuenta</div>
     </div>
-    <p id="signup-closed" class="note center hidden"></p>
     <form id="login-form" autocomplete="off">
       <label for="f-user">Nombre</label>
       <input id="f-user" class="field" maxlength="16" spellcheck="false">
@@ -174,6 +174,7 @@
   <div class="menu-right">
     <div class="box">
       <div class="menu-list">
+        <button class="menu-item play hidden" data-go="resume">Continuar partida<small id="menu-resume-sub"></small></button>
         <button class="menu-item play" data-go="play">Jugar<small>Entra en la mazmorra</small></button>
         <button class="menu-item" data-go="dex">Pokémon<small id="menu-dex-count">Tu colección</small></button>
         <button class="menu-item" data-go="upgrades">Mejoras<small>Haz más fuerte cada run</small></button>
@@ -259,6 +260,8 @@
     <p>No está afiliado, patrocinado ni aprobado por Nintendo, Creatures Inc., GAME FREAK ni
       The Pokémon Company. Pokémon y todos los nombres y personajes relacionados son marcas y
       propiedad de sus respectivos dueños.</p>
+    <h3>Web oficial</h3>
+    <p>La única web oficial de PokéSurvivor es pokesurvivor.com. El juego es y será gratis: si alguien te pide pagar, no somos nosotros.</p>
     <h3>Criptomonedas</h3>
     <p>PokéSurvivor no tiene ninguna criptomoneda, token ni NFT oficial, y su autor no ha creado ninguno. Cualquier token que use el nombre del juego lo han creado terceros: no nos hacemos cargo de ninguna compra, venta o inversión que hagas con ellos, y nada de lo que hay aquí es una recomendación de inversión.</p>
     <h3>Contenido de terceros</h3>
@@ -270,6 +273,7 @@
     <p>Si eres titular de derechos y quieres que retiremos algo, escríbenos y lo quitaremos lo
       antes posible: <a id="legal-mail" href="#"></a></p>
     <p>Código fuente: <a id="legal-repo" href="#" target="_blank" rel="noopener"></a></p>
+    <p>Licencia del código: PolyForm Noncommercial 1.0.0 (se puede usar, estudiar y modificar, pero no para ganar dinero). Las versiones hasta el 14-10-2026 siguen bajo MIT.</p>
     <h3>Privacidad</h3>
     <p>Si creas una cuenta, guardamos tu nombre de jugador y tu partida (colección, monedas,
       mejoras y estadísticas) en Google Firebase para que puedas seguir en cualquier ordenador.
@@ -535,6 +539,7 @@
     <div id="pause-sound" class="sound-inline"></div>
     <div class="row" style="justify-content:center">
       <button id="btn-resume" class="btn gold">Continuar</button>
+      <button id="btn-save-quit" class="btn">Guardar y salir</button>
       <button id="btn-pause-settings" class="btn">Ajustes</button>
       <button id="btn-quit" class="btn">Abandonar run</button>
     </div>
@@ -550,6 +555,6 @@
 </section>
 
 <!-- datos generados -->
-<script defer src="js/app.min.js?v=9b6272e8da"></script>
+<script defer src="js/app.min.js?v=b94e037a96"></script>
 </body>
 </html>

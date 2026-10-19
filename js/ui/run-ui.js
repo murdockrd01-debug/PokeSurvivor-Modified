@@ -225,12 +225,15 @@ G.RunUI = (() => {
     G.UI.soundControls($('pause-sound'));
     $('pause-coop').classList.toggle('hidden', !coop);
     $('btn-quit').textContent = coop ? 'Salir de la partida' : 'Abandonar run';
+    // "Guardar y salir": sólo en solitario y con cuenta (el invitado no guarda nada).
+    $('btn-save-quit').classList.toggle('hidden', !!coop || !!G.DB.guest);
     G.UI.show('scr-pause');
   }
 
-  function wirePause(onResume, onQuit) {
+  function wirePause(onResume, onQuit, onSaveQuit) {
     $('btn-resume').onclick = onResume;
     $('btn-quit').onclick = onQuit;
+    $('btn-save-quit').onclick = onSaveQuit;
   }
 
   return { showLevelUp, reroll, showItemChoice, showBond, pickBond, bondBack, pick, setWaiting, closeLevelUp, showOver, wirePause, showPause };

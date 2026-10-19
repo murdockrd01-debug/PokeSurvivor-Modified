@@ -75,6 +75,61 @@ G.Player = class Player {
     this.statsTaken = {};      // mejoras de stat cogidas (condición de evolución)
   }
 
+  // ---------------- guardar la partida a medias (core/runsave.js) ----------------
+
+  /** Todo lo que define a tu Pokémon en esta run, listo para JSON. */
+  exportRun() {
+    const SKIP = new Set(['dex', 'shiny', 'invuln', 'flash', 'attackFace', 'walking', 'inLiquid', 'lavaTick',
+      'slowT', 'frozen', 'reviveT', 'dead', 'uid', 'coopHost']);
+    const f = {};
+    for (const k of Object.keys(this)) {
+      const v = this[k];
+      if (SKIP.has(k)) continue;
+      if (typeof v === 'number' ? Number.isFinite(v) : (typeof v === 'boolean' || typeof v === 'string')) f[k] = v;
+    }
+    return {
+      dex: this.dex, shiny: !!this.shiny, f,
+      item: this.item || null,
+      buffs: JSON.parse(JSON.stringify(this.buffs)),
+      statsTaken: Object.assign({}, this.statsTaken),
+      bind: Object.assign({}, this.bind),
+      banned: [...this.banned],
+      moves: this.moves.map(m => ({ id: m.id, lvl: m.lvl, evolved: !!m.evolved })),
+      slots: this.slots.map(g => g.map(m => m.id)),
+      active: this.active
+    };
+  }
+
+  /** Vuelve a dejar a tu Pokémon como estaba (la inversa de exportRun). */
+  importRun(s) {
+    for (const k of Object.keys(s.f || {})) {
+      const v = s.f[k], cur = this[k];
+      // Sólo campos que ya existen con el mismo tipo (o los internos "_x" que crean los objetos).
+      if (cur === undefined ? k[0] === '_' : typeof cur === typeof v) this[k] = v;
+    }
+    this.item = s.item && G.Items.BY[s.item] ? s.item : null;    // sin on(): los números ya traen su efecto
+    for (const k of Object.keys(this.buffs)) if (s.buffs && s.buffs[k]) Object.assign(this.buffs[k], s.buffs[k]);
+    this.statsTaken = Object.assign({}, s.statsTaken);
+    this.bind = Object.assign({}, s.bind);
+    this.banned = new Set(s.banned || []);
+    this.moves = []; this.slots = [];
+    const byId = {};
+    for (const sm of s.moves || []) {
+      if (!G.Moves.BY_ID[sm.id] || byId[sm.id]) continue;
+      const m = G.Moves.instance(sm.id, Math.max(1, sm.lvl | 0));
+      if (sm.evolved) G.Moves.evolve(m);
+      this.moves.push(m); byId[sm.id] = m;
+    }
+    for (const g of s.slots || []) {
+      const grp = g.map(id => byId[id]).filter(Boolean);
+      if (grp.length) this.slots.push(grp);
+    }
+    for (const m of this.moves) if (!this.slots.some(g => g.includes(m))) this.slots.push([m]);
+    this.active = Math.max(0, Math.min(this.slots.length - 1, s.active | 0));
+    this.hp = Math.max(1, Math.min(this.hp, this.maxHp));
+    this.dead = false;
+  }
+
   /** Segundos que hay que estar junto a un compañero caído para levantarlo. */
   static get REVIVE_TIME() { return 3; }
 
