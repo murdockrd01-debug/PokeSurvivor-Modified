@@ -15,6 +15,8 @@
  *
  * Idioma: el elegido en Ajustes; si no, /en/ en la dirección o el del navegador
  * (español si el navegador está en español, inglés en cualquier otro caso).
+ * En la app de Android (el juego se abre desde un archivo, file://) el idioma de
+ * partida es español, sea cual sea el del teléfono; sigue pudiéndose cambiar en Ajustes.
  */
 G.I18n = (() => {
   const KEY = 'ps.lang';
@@ -22,7 +24,7 @@ G.I18n = (() => {
   try { saved = localStorage.getItem(KEY); } catch (e) { /* nada */ }
   const byPath = /\/en(\/|$)/.test(location.pathname) ? 'en' : null;
   const nav = ((navigator.languages && navigator.languages[0]) || navigator.language || 'es').toLowerCase();
-  const lang = saved === 'es' || saved === 'en' ? saved : byPath || (nav.startsWith('es') ? 'es' : 'en');
+  const lang = saved === 'es' || saved === 'en' ? saved : byPath || (location.protocol === 'file:' || nav.startsWith('es') ? 'es' : 'en');
   document.documentElement.lang = lang;
 
   const exact = new Map(), exactLow = new Map();
