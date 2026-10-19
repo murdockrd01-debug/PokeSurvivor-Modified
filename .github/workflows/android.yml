@@ -116,9 +116,12 @@ jobs:
           EOF
 
       - name: Usar clave fija
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
         run: |
+          test -n "$KEYSTORE_B64" || { echo "Falta el secreto KEYSTORE_B64"; exit 1; }
           mkdir -p ~/.android
-          cp 1360 ~/.android/debug.keystore
+          echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
 
       - name: Build APK
         run: |
