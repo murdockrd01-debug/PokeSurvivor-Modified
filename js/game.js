@@ -30,14 +30,7 @@ G.Game = (() => {
     cv = document.getElementById('game');
     ctx = cv.getContext('2d');
     resize();
-    addEventListener('resize', resizeSoon);
-    // iPhone: al girarlo o al abrirlo desde la pantalla de inicio avisa del
-    // cambio ANTES de recolocar la página, y con esas medidas viejas el juego
-    // se quedaba estirado. Se vuelve a medir cuando el lienzo cambia de verdad
-    // (ResizeObserver) y, por si acaso, un poco después de cada aviso.
-    addEventListener('orientationchange', resizeSoon);
-    if (window.visualViewport) visualViewport.addEventListener('resize', resizeSoon);
-    if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(cv);
+    addEventListener('resize', resize);
     G.Touch.init(cv);
     // En móvil: al cambiar de app o girarlo en vertical, la partida se pausa.
     document.addEventListener('visibilitychange', () => { if (document.hidden) { autoPause(); saveNow(); } });
@@ -53,22 +46,12 @@ G.Game = (() => {
   function resize() {
     // Resolución interna como mucho ×1,5: en pantallas ×2 dibujar el doble de
     // píxeles era de lo que más costaba, y con el pixel art no se nota.
-    const d = Math.min(1.5, window.devicePixelRatio || 1);
-    const cw = cv.clientWidth, ch = cv.clientHeight;
-    if (!cw || !ch) return;
-    G.Touch.resetSafe();
-    if (cw === w && ch === h && d === dpr && cv.width === Math.round(cw * d) && cv.height === Math.round(ch * d)) { checkOrientation(); return; }
-    dpr = d; w = cw; h = ch;
+    dpr = Math.min(1.5, window.devicePixelRatio || 1);
+    w = cv.clientWidth; h = cv.clientHeight;
     cv.width = Math.round(w * dpr);
     cv.height = Math.round(h * dpr);
     G.Camera.resize(w, h, dpr);
     checkOrientation();
-  }
-  let resizeTs = [];
-  function resizeSoon() {
-    resize();
-    resizeTs.forEach(clearTimeout);
-    resizeTs = [100, 350, 800].map(ms => setTimeout(resize, ms));
   }
 
   /** Móvil en vertical: aviso de girarlo (y pausa). */
@@ -108,7 +91,7 @@ G.Game = (() => {
    * @param coop  { seed, host, members } para una partida en grupo
    * @param snap  partida guardada a medias (core/runsave.js): la recupera en vez de empezar de cero
    */
-  function startRun(coop = null, snap = null) {
+  function startRun(coop = null, snap = null, mode = null) {
     holdBy = []; awayBy = null;
     const save = G.DB.save;
     const mon = G.DEX_BY[snap ? snap.player.dex : save.partner];
@@ -132,6 +115,10 @@ G.Game = (() => {
     biome = snap ? Math.floor(snap.time / 240) : 0;
     G.World.setBiome(biome, true);
     time = snap ? snap.time : 0; pendingLevels = snap ? Math.max(0, snap.pending | 0) : 0;
+    // Modo Roguelike (systems/roguelike.js): sólo en solitario; una partida guardada recuerda su modo.
+    const rogue = !coop && (snap ? snap.mode === 'rogue' : mode === 'rogue');
+    G.Roguelike.reset(rogue, time); floorOpen = false;
+    if (snap && rogue) G.Roguelike.importRun(snap.rogue);
     // Una partida recuperada no entra en el ranking (clean() la descarta).
     runReal = performance.now(); tampered = !!snap; deadCleared = false; saveT = 0;
     if (snap) { G.Enemies.importRun(snap.enemies); G.Spawner.importRun(snap.spawner); }
@@ -183,6 +170,7 @@ G.Game = (() => {
   // ---------------- guardar la partida a medias (core/runsave.js) ----------------
 
   let saveT = 0, deadCleared = false;
+  let floorOpen = false;      // cartas de piso abiertas sin elegir (Modo Roguelike)
 
   /** Sólo en solitario y con cuenta, y no dentro de la grieta ni de las Ruinas del Juicio. */
   function canSave() {
@@ -196,7 +184,9 @@ G.Game = (() => {
     try {
       return G.RunSave.save({
         time,
-        pending: pendingLevels + (state === 'levelup' ? 1 : 0),     // la carta abierta sin elegir vuelve a salir
+        pending: pendingLevels + (state === 'levelup' && !floorOpen ? 1 : 0),     // la carta abierta sin elegir vuelve a salir
+        mode: G.Roguelike.active ? 'rogue' : 'normal',
+        rogue: G.Roguelike.active ? G.Roguelike.exportRun(state === 'levelup' && floorOpen) : null,
         seed: G.World.getSeed(), caught: caught.slice(),
         player: pl.exportRun(), enemies: G.Enemies.exportRun(), spawner: G.Spawner.exportRun()
       });
@@ -382,17 +372,18 @@ G.Game = (() => {
       recogidas: pl.coins
     };
     const coins = Math.round((parts.tiempo + parts.derrotados + parts.jefes + parts.recogidas) * mul);
-    const record = time > save.stats.bestTime;
+    const rogue = G.Roguelike.active;         // el Modo Roguelike no cuenta para récords ni ranking
+    const record = !rogue && time > save.stats.bestTime;
 
     save.coins += coins;
     bankTickets(false);
     save.stats.runs++;
-    save.pused = save.pused || {};
-    save.pused[pl.dex] = (+save.pused[pl.dex] || 0) + 1;     // para "más usados" en la colección
     save.stats.totalKills += pl.kills;
-    save.stats.bestTime = Math.max(save.stats.bestTime, Math.floor(time));
-    if (coop) save.stats.bestGroupTime = Math.max(save.stats.bestGroupTime || 0, Math.floor(time));
-    save.stats.bestLevel = Math.max(save.stats.bestLevel, pl.level);
+    if (!rogue) {
+      save.stats.bestTime = Math.max(save.stats.bestTime, Math.floor(time));
+      if (coop) save.stats.bestGroupTime = Math.max(save.stats.bestGroupTime || 0, Math.floor(time));
+      save.stats.bestLevel = Math.max(save.stats.bestLevel, pl.level);
+    }
     save.stats.coinsEarned += coins;
     const judge = G.Judgment.summary();
     if (judge) G.Progress.event('judgeEnd', judge);
@@ -407,7 +398,7 @@ G.Game = (() => {
     // Ranking: en solitario cada uno lo suyo; en grupo lo sube el anfitrión.
     const mark = { t: Math.floor(time), lv: pl.level, kills: pl.kills };
     // Si la partida se ha tocado (ver clean()), no sube al ranking (sin avisar); lo demás, sí.
-    const ok = clean();
+    const ok = clean() && !rogue;
     const sent = ok && !coop ? G.Ranking.submitSolo(Object.assign(mark, { dex: pl.dex, shiny: pl.shiny }))
                : ok && wasHost ? G.Ranking.submitGroup(Object.assign(mark, { members: team })) : null;
     if (sent) sent.then(b => { if (b && b.some(p => p !== 'a')) G.DB.commit(true); }).catch(() => {});
@@ -460,6 +451,21 @@ G.Game = (() => {
       card.apply(pl);
       state = 'playing';
     });
+  }
+
+  /** Modo Roguelike: las cartas de rareza al superar ciertos pisos. */
+  function maybeFloorCards() {
+    if (!G.Roguelike.active || G.Roguelike.due <= 0 || state !== 'playing' || !pl || pl.dead || G.Coop.active) return;
+    G.Roguelike.due--;
+    state = 'levelup'; floorOpen = true;
+    G.Audio.sfx('levelup');
+    const gen = () => G.Roguelike.offer(pl);
+    G.RunUI.showLevelUp(G.Roguelike.floor, gen(), card => {
+      G.Audio.sfx('confirm');
+      card.apply(pl);
+      floorOpen = false;
+      state = 'playing';
+    }, false, { floor: true, regen: gen });
   }
 
   // ---------------- vínculos ----------------
@@ -680,7 +686,6 @@ G.Game = (() => {
     if (fpsAcc >= 0.5) { fpsShown = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; }
     frameDt = state === 'playing' ? dt : 0;
 
-    G.Pad.poll(real);
     handleKeys();
 
     if (state === 'playing') update(dt);
@@ -753,12 +758,13 @@ G.Game = (() => {
     G.Interact.update(dt, pl);
     G.Rift.update(dt, pl, time);
     G.Judgment.update(dt, pl, time);
+    G.Roguelike.update(dt, time);
     G.Events.update(dt, all, time);
     G.Weather.update(dt, time, pl);
     G.FX.update(dt);
 
     G.Audio.music(G.Judgment.active ? G.Judgment.music : G.Rift.inArena ? 'rift' : G.EnemyMgr.bossAlive() ? 'boss' : G.BIOME_MUSIC[biome % G.BIOME_MUSIC.length]);
-    if (!coop || G.Coop.isHost) maybeLevelUp();
+    if (!coop || G.Coop.isHost) { maybeLevelUp(); maybeFloorCards(); }
     if (pl.bonds > 0) offerBond(true);
     if (G.Coop.isHost) checkAllDown(dt);
     saveT += dt;
@@ -811,33 +817,6 @@ G.Game = (() => {
     }
   }
 
-  /*
-   * Apuntar a mano: una mira donde está el ratón (y el cursor en cruz), o
-   * delante de tu Pokémon si apuntas con el stick derecho.
-   */
-  function drawAimMark() {
-    const on = state === 'playing' && pl && pl.manualAim && !G.Judgment.cinematic;
-    const cur = on && !G.Pad.aim() ? 'crosshair' : '';
-    if (cv.style.cursor !== cur) cv.style.cursor = cur;
-    if (!on) return;
-    let x, y;
-    if (G.Pad.aim()) {
-      const k = G.Camera.scale;
-      x = (pl.x - G.Camera.left() + Math.cos(pl.aim) * 90) * k;
-      y = (pl.y - G.LIFT * 0.5 - G.Camera.top() + Math.sin(pl.aim) * 90) * k;
-    } else ({ x, y } = G.Input.mouse());
-    ctx.save();
-    ctx.lineCap = 'round';
-    for (const [col, lw] of [['rgba(0,0,0,.65)', 4], ['#ffe9a8', 1.6]]) {
-      ctx.strokeStyle = col; ctx.lineWidth = lw;
-      ctx.beginPath(); ctx.arc(x, y, 9, 0, 6.2832); ctx.stroke();
-      ctx.beginPath();
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.moveTo(x + dx * 5, y + dy * 5); ctx.lineTo(x + dx * 14, y + dy * 14); }
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
   function render() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
@@ -867,7 +846,6 @@ G.Game = (() => {
     if (!G.Judgment.cinematic) G.HUD.draw(ctx, w, h, pl, st);
     G.Judgment.drawOverlay(ctx, w, h);
     G.Touch.draw(ctx);
-    drawAimMark();
     if (G.Settings.get('fps')) {
       ctx.save();
       ctx.font = '700 11px Pixelify, monospace';
@@ -990,7 +968,7 @@ G.Game = (() => {
     quit() { if (state !== 'ui' && state !== 'over') quitRun(); },
     /** Para grabar vídeos: abre las cartas de subir de nivel. */
     debugLevelUp() { tampered = true; pl.level++; pendingLevels++; },
-    toUI() { state = 'ui'; if (cv) cv.style.cursor = ''; Backdrop.restore(); },
+    toUI() { state = 'ui'; Backdrop.restore(); },
     get state() { return state; }, get player() { return pl; }, st
   };
 })();
@@ -1043,7 +1021,7 @@ G.Flow = {
     if (G.Game.state !== 'ui') G.Game.toUI();
     G.Audio.music('village');
     G.MenuUI.open();
-    if (!G.LoginUI.updateNotices()) G.LoginUI.offerRecovery();
+    G.LoginUI.offerRecovery();
   },
   /** Al cerrar el resumen: a la sala si sigues en una, si no al menú. */
   afterRun() {
@@ -1054,10 +1032,11 @@ G.Flow = {
       G.LobbyUI.open();
     } else this.goMenu();
   },
-  play() {
+  /** @param mode  null = carrera normal · 'rogue' = Modo Roguelike (systems/roguelike.js) */
+  play(mode = null) {
     if (G.RunSave.has() && !confirm('Tienes una partida guardada. Si empiezas una nueva, la guardada se perderá. ¿Empezar de nuevo?')) return;
     G.RunSave.clear();
-    G.Game.startRun();
+    G.Game.startRun(null, null, mode);
   },
   /** Continúa la partida guardada a medias (core/runsave.js). */
   resume() {

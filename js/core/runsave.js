@@ -50,10 +50,10 @@ G.RunSave = (() => {
     },
     /** La partida guardada completa, o null. */
     load: read,
-    /** Resumen para el menú (o null si no hay): { dex, level, time }. */
+    /** Resumen para el menú (o null si no hay): { dex, level, time, mode }. */
     peek() {
       const s = read();
-      return s ? { dex: s.player.dex, level: (s.player.f && s.player.f.level) || 1, time: s.time } : null;
+      return s ? { dex: s.player.dex, level: (s.player.f && s.player.f.level) || 1, time: s.time, mode: s.mode || 'normal' } : null;
     },
     has() { return !!read(); },
     clear() {

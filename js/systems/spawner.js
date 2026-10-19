@@ -76,35 +76,13 @@ G.Spawner = (() => {
     return Math.random() < SHINY_RATE;
   }
 
-  // Como mucho 3 curanderos, 3 escuderos y 3 invocadores vivos a la vez
-  // (18-10-2026: juntos dejaban a la horda, y a los jefes, casi inmortales).
-  // Si ya hay 3 de uno, sale otro del elenco.
-  const SUPPORT_MAX = 3, SUPPORT = new Set(['healer', 'shielder', 'summoner']);
-  /** Tipos de apoyo que ya tienen 3 vivos. */
-  function supportFull() {
-    const n = {}, full = new Set();
-    for (const e of G.EnemyMgr.all()) {
-      if (!e.dead && SUPPORT.has(e.behavior) && (n[e.behavior] = (n[e.behavior] || 0) + 1) >= SUPPORT_MAX) full.add(e.behavior);
-    }
-    return full;
-  }
-
   function spawnOne(pl, t, angle) {
-    const bag = G.Enemies.bagAt(t);
-    let def = G.U.pick(bag);
-    if (SUPPORT.has(def.behavior)) {
-      const full = supportFull();
-      if (full.has(def.behavior)) {
-        const rest = bag.filter(d => !full.has(d.behavior));
-        if (!rest.length) return null;
-        def = G.U.pick(rest);
-      }
-    }
+    const def = G.U.pick(G.Enemies.bagAt(t));
     const pt = freePoint(pl, angle == null ? Math.random() * 6.2832 : angle, isFlyer(def));
     if (!pt) return null;
     const shiny = rollShiny(def.dex);
-    const e = new G.Enemy(def, pt[0], pt[1], scaled(G.Enemies.scale(t), G.Coop.scaleHp(players.length) * hpK(t)));
-    e.dmg *= DMG_K; e.xp = Math.round(e.xp * XP_K);
+    const e = new G.Enemy(def, pt[0], pt[1], scaled(G.Enemies.scale(t), G.Coop.scaleHp(players.length) * hpK(t) * G.Roguelike.hpK()));
+    e.dmg *= DMG_K * G.Roguelike.dmgK(); e.xp = Math.round(e.xp * XP_K);
     if (G.EnemyMgr.count >= CAP * ELITE_FROM) { e.maxHp = e.hp = Math.round(e.maxHp * 1.6); e.dmg *= 1.25; e.xp = Math.round(e.xp * 1.6); }
     if (shiny) e.makeShiny();
     if (G.Events.golden) e.makeGolden();
@@ -140,8 +118,13 @@ G.Spawner = (() => {
     if (preloadT <= 0) { preloadT = 10; G.Sprites.preload(G.Enemies.upcomingDex(t, 60)); }
 
     // --- jefes ---
-    const b = G.Enemies.BOSSES[bossIdx];
-    if (b && t >= b.at) { spawnBoss(anchor(), t, b); bossIdx++; }
+    // Modo Roguelike: un jefe cada ciertos pisos (systems/roguelike.js), no los del reloj.
+    if (G.Roguelike.active) {
+      if (G.Roguelike.takeBoss()) { const bs = G.Enemies.BOSSES; spawnBoss(anchor(), t, bs[bossIdx % bs.length]); bossIdx++; }
+    } else {
+      const b = G.Enemies.BOSSES[bossIdx];
+      if (b && t >= b.at) { spawnBoss(anchor(), t, b); bossIdx++; }
+    }
 
     // Combate de jefe: las oleadas bajan al 25% y no hay mareas, para que el
     // jefe sea un momento propio y se le pueda apuntar entre la multitud.
@@ -149,7 +132,7 @@ G.Spawner = (() => {
 
     // --- goteo normal ---
     if (G.EnemyMgr.count < CAP) {
-      acc += rate(t) * G.Coop.scaleRate(players.length) * (bossFight ? 0.25 : 1) * dt;
+      acc += rate(t) * G.Coop.scaleRate(players.length) * G.Roguelike.rateK() * (bossFight ? 0.25 : 1) * dt;
       let n = Math.floor(acc);
       acc -= n;
       while (n-- > 0 && G.EnemyMgr.count < CAP) spawnOne(anchor(), t);

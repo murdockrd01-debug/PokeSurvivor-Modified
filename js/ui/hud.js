@@ -41,8 +41,7 @@ G.HUD = (() => {
     ctx.fillRect(0, 0, w * G.U.clamp(xpF, 0, 1), 7);
 
     // ---------- vida + nivel ----------
-    const sa = G.Touch.safeArea();
-    const px = 16 + sa.left, py = 20 + sa.top;     // lejos de la muesca del iPhone
+    const px = 16, py = 20;
     ctx.font = F(800, 13);
     ctx.fillStyle = '#eaf2ff';
     ctx.textAlign = 'left';
@@ -59,8 +58,8 @@ G.HUD = (() => {
     ctx.fillText(Math.ceil(pl.hp) + ' / ' + Math.round(pl.maxHp), px + 48 + 84, py + 26);
 
     // buffs activos
-    const COL = { atk: '#ff6b4d', patk: '#ff6b4d', satk: '#c47bff', spd: '#7fe0ff', def: '#b0b8c8', regen: '#5fe08a' };
-    const LBL = { atk: 'ATK', patk: 'ATK', satk: 'AT.E', spd: 'VEL', def: 'DEF', regen: 'REG' };
+    const COL = { atk: '#ff6b4d', spd: '#7fe0ff', def: '#b0b8c8', regen: '#5fe08a' };
+    const LBL = { atk: 'ATK', spd: 'VEL', def: 'DEF', regen: 'REG' };
     let bx = px;
     ctx.textAlign = 'left';
     for (const k in pl.buffs) {
@@ -81,6 +80,14 @@ G.HUD = (() => {
     ctx.font = F(800, 26);
     ctx.fillStyle = 'rgba(255,255,255,.95)';
     ctx.fillText(G.U.mmss(st.time), w / 2, 42);
+    if (G.Roguelike.active) {                       // Modo Roguelike: piso actual y lo que falta para el siguiente
+      ctx.textAlign = 'right'; ctx.font = F(800, 13); ctx.fillStyle = '#ffd23f';
+      ctx.fillText(G.T('PISO {x}', G.Roguelike.floor), w / 2 - 50, 41);
+      const fp = (st.time % G.Roguelike.FLOOR_LEN) / G.Roguelike.FLOOR_LEN;
+      ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(w / 2 - 50, 63, 100, 4);
+      ctx.fillStyle = '#ffd23f'; ctx.fillRect(w / 2 - 50, 63, 100 * fp, 4);
+      ctx.textAlign = 'center';
+    }
     ctx.font = F(600, 10);
     ctx.fillStyle = '#8fa3c4';
     ctx.fillText(G.World.biomeName().toUpperCase() + '  ·  ' + pl.kills + ' DERROTADOS  ·  ' + pl.coins + ' MONEDAS', w / 2, 58);
@@ -92,7 +99,7 @@ G.HUD = (() => {
       ctx.textAlign = 'left';
       const txt = wx.name.toUpperCase() + ' · ' + Math.ceil(wx.left) + 's';
       const tw = ctx.measureText(txt).width + 40;
-      const x0 = w - tw - 16 - sa.right - (touch ? 56 : 0), y0 = 14 + sa.top;
+      const x0 = w - tw - 16 - (touch ? 56 : 0), y0 = 14;
       roundRect(ctx, x0, y0, tw, 26, 9);
       ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fill();
       G.Icons.draw(ctx, wx.icon, x0 + 6, y0 + 3, 20);
