@@ -3,8 +3,12 @@
  * Mismos multiplicadores que la tabla de la web (js/data/types.js): ×1,6 · ×0,6 · ×0,3.
  *
  * Tres pestañas:
- *   Tabla       la matriz 18×18. Toca una casilla (ese ataque contra ese tipo), o los
- *               nombres de las filas / columnas, que se quedan fijos al desplazarte.
+ *   Tabla       la matriz 18×18, ajustada para que quepa ENTERA en la pantalla del móvil
+ *               (sin desplazarte). Cada casilla lleva un símbolo además del color:
+ *               ▲ muy eficaz · ▼ poco eficaz · ✕ casi inmune. Toca una casilla (ese ataque
+ *               contra ese tipo), o los nombres de filas / columnas. El detalle sale en un
+ *               panel (arriba en vertical, al lado en horizontal). «Ampliar casillas» las
+ *               deja grandes, con los multiplicadores a la vista (ahí sí se desplaza).
  *   Calculadora tipos grandes para tocar: uno de ataque y hasta DOS que lo reciben,
  *               y te dice el daño combinado (se multiplican, tope ×2,4 y mínimo ×0,3).
  *   Clima       qué hace cada clima del juego (datos de G.Weather).
@@ -15,7 +19,50 @@ G.TypesUI = (() => {
   const $ = G.UI.$;
   const ORDER = Object.keys(G.U.TYPE_NAME);
   const COL = G.U.TYPE_COLOR, NAME = G.U.TYPE_NAME;
-  let tab = 'chart', atk = null, def = [];
+  let tab = 'chart', atk = null, def = [], big = false;
+
+  G.I18n.add({
+    'Ampliar casillas': 'Enlarge cells', 'Reducir casillas': 'Shrink cells',
+    'Filas: ataque · columnas: quien lo recibe. Toca una casilla o un nombre.': 'Rows: attack · columns: who receives it. Tap a cell or a name.'
+  });
+
+  // Estilos de la tabla (van aquí para que la tabla sea un solo archivo; se aplican por encima de css/style.css).
+  const CSS = `
+#ty-body .ty-split { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+#ty-body .ty-side { display: contents; }
+#ty-body .ty-split .ty-read { order: 1; flex: none; height: 92px; overflow: auto; padding: 6px 8px; font-size: 13px; line-height: 1.55; }
+#ty-body .ty-bar { order: 2; flex: none; display: flex; align-items: center; gap: 8px; }
+#ty-body .ty-bar .ty-help { flex: 1; margin: 0; }
+#ty-body .ty-bar .btn { flex: none; min-height: 36px; }
+#ty-body .ty-wrap { order: 3; flex: 1; min-height: 0; margin: 0; overflow: hidden; display: flex; justify-content: center; align-items: flex-start; border: 0; background: none; }
+#ty-body .ty-wrap.big { display: block; overflow: auto; border: 2px solid var(--edge-in); background: rgba(5,9,22,.6); }
+#ty-body .ty-legend { order: 4; flex: none; margin: 0; gap: 4px; }
+#ty-body .ty-legend .lg b { margin-right: 4px; }
+#ty-body .ty-chart { --cell: 18px; flex: none; table-layout: fixed; border-collapse: separate; border-spacing: 1px; width: calc(32px + var(--cell) * 18 + 19px); }
+#ty-body .ty-chart th.corner { width: 32px; }
+#ty-body .ty-chart th.c { width: var(--cell); }
+#ty-body .ty-chart th { position: static; background: none; }
+#ty-body .ty-chart .tb { padding: 0; border-radius: 3px; height: 15px; line-height: 15px; font-size: 8.5px; letter-spacing: -.2px; overflow: hidden; }
+#ty-body .ty-chart th.r .tb { height: var(--cell); line-height: var(--cell); font-size: min(10px, calc(var(--cell) * .5)); }
+#ty-body .ty-chart td { min-width: 0; width: var(--cell); height: var(--cell); border-radius: 3px; font-size: calc(var(--cell) * .55); line-height: 1; overflow: hidden; }
+#ty-body .ty-chart td b { font-weight: 700; }
+#ty-body .ty-chart td i, #ty-body .ty-chart .fu { display: none; }
+#ty-body .ty-wrap.big .ty-chart { table-layout: auto; width: auto; border-spacing: 3px; }
+#ty-body .ty-wrap.big .ty-chart th { position: sticky; z-index: 2; background: #0c1330; }
+#ty-body .ty-wrap.big .ty-chart .tb { padding: 7px; height: auto; line-height: normal; font-size: 11px; letter-spacing: 0; }
+#ty-body .ty-wrap.big .ty-chart th.c .tb { min-width: 38px; }
+#ty-body .ty-wrap.big .ty-chart td { min-width: 46px; width: auto; height: 44px; font-size: 12px; border-radius: 6px; }
+#ty-body .ty-wrap.big .ty-chart td b { display: block; font-size: 10px; opacity: .8; }
+#ty-body .ty-wrap.big .ty-chart td i { display: block; font-style: normal; }
+#ty-body .ty-wrap.big .ty-chart .ab { display: none; }
+#ty-body .ty-wrap.big .ty-chart .fu { display: inline; }
+@media (min-width: 700px) {
+  #ty-body .ty-split { flex-direction: row-reverse; }
+  #ty-body .ty-side { display: flex; flex-direction: column; gap: 6px; flex: none; width: 270px; overflow: auto; }
+  #ty-body .ty-split .ty-read { height: auto; flex: 1; min-height: 110px; }
+  #ty-body .ty-wrap { min-width: 0; }
+}`;
+  { const st = document.createElement('style'); st.id = 'ty-chart-css'; st.textContent = CSS; document.head.appendChild(st); }
 
   const num = v => String(Math.round(v * 100) / 100).replace('.', G.I18n.lang === 'en' ? '.' : ',');
   const x = v => '×' + num(v);
@@ -33,9 +80,10 @@ G.TypesUI = (() => {
     $('ty-tabs').querySelectorAll('[data-t]').forEach(t => {
       t.onclick = () => { tab = t.dataset.t; G.Audio.sfx('click'); render(); };
     });
+    addEventListener('resize', fit);
   }
 
-  function open() { render(); $('scr-types').classList.remove('hidden'); }
+  function open() { render(); $('scr-types').classList.remove('hidden'); fit(); }
   function close() { $('scr-types').classList.add('hidden'); }
 
   function render() {
@@ -81,15 +129,30 @@ G.TypesUI = (() => {
   }
 
   // ---------------- Tabla ----------------
+  const SYM = { x16: '▲', x06: '▼', x03: '✕' };
+  const abbr = t => G.T(NAME[t]).slice(0, 3);
+
   function renderChart() {
-    const head = ORDER.map(d => `<th class="c" data-d="${d}"><span class="tb" style="background:${COL[d]};color:${ink(COL[d])}">${NAME[d].slice(0, 3)}</span></th>`).join('');
-    const rows = ORDER.map(a => `<tr><th class="r" data-a="${a}"><span class="tb" style="background:${COL[a]};color:${ink(COL[a])}">${NAME[a]}</span></th>${
-      ORDER.map(d => { const m = cellMult(a, d), k = kind(m); return `<td class="${k}" data-a="${a}" data-d="${d}">${k ? x(m) : ''}</td>`; }).join('')}</tr>`).join('');
+    const tag = (t, short) => `<span class="tb" style="background:${COL[t]};color:${ink(COL[t])}">${short ? `<span class="ab">${abbr(t)}</span><span class="fu">${NAME[t]}</span>` : abbr(t)}</span>`;
+    const head = ORDER.map(d => `<th class="c" data-d="${d}">${tag(d)}</th>`).join('');
+    const rows = ORDER.map(a => `<tr><th class="r" data-a="${a}">${tag(a, true)}</th>${
+      ORDER.map(d => { const m = cellMult(a, d), k = kind(m); return `<td class="${k}" data-a="${a}" data-d="${d}">${k ? `<b>${SYM[k]}</b><i>${x(m)}</i>` : ''}</td>`; }).join('')}</tr>`).join('');
     $('ty-body').innerHTML = `
-      <div class="ty-read" id="ty-read"></div>
-      <p class="ty-help">Filas: ataque · columnas: quien lo recibe. Toca una casilla para ver el daño; toca los nombres para elegir tipos.</p>
-      <div class="ty-wrap"><table class="ty-chart" id="ty-chart"><thead><tr><th class="corner"></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
-      <div class="ty-legend"><span class="lg x16">×1,6 muy eficaz</span><span class="lg x06">×0,6 poco eficaz</span><span class="lg x03">×0,3 casi inmune</span><span class="lg">vacío = ×1</span></div>`;
+      <div class="ty-split">
+        <div class="ty-side">
+          <div class="ty-read" id="ty-read"></div>
+          <div class="ty-bar"><p class="ty-help">Filas: ataque · columnas: quien lo recibe. Toca una casilla o un nombre.</p><button class="btn small" id="ty-zoom"></button></div>
+          <div class="ty-legend"><span class="lg x16"><b>▲</b><span>×1,6 muy eficaz</span></span><span class="lg x06"><b>▼</b><span>×0,6 poco eficaz</span></span><span class="lg x03"><b>✕</b><span>×0,3 casi inmune</span></span><span class="lg"><span>vacío = ×1</span></span></div>
+        </div>
+        <div class="ty-wrap${big ? ' big' : ''}" id="ty-wrap"><table class="ty-chart" id="ty-chart"><thead><tr><th class="corner"></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
+      </div>`;
+    const zoom = () => { $('ty-zoom').textContent = big ? 'Reducir casillas' : 'Ampliar casillas'; };
+    zoom();
+    $('ty-zoom').onclick = () => {
+      big = !big; G.Audio.sfx('click');
+      $('ty-wrap').classList.toggle('big', big);
+      zoom(); fit();
+    };
     $('ty-chart').onclick = e => {
       const el = e.target.closest('td, th');
       if (!el || el.classList.contains('corner')) return;
@@ -100,6 +163,18 @@ G.TypesUI = (() => {
       paintChart();
     };
     paintChart();
+    fit();
+  }
+
+  /** Tamaño de casilla para que las 18 columnas y filas quepan enteras (sin desplazarse). */
+  function fit() {
+    const wrap = $('ty-wrap'), tbl = $('ty-chart');
+    if (!wrap || !tbl || big) { if (wrap) wrap.style.overflow = ''; return; }
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    if (!w || !h) return;
+    const c = Math.floor(Math.min((w - 32 - 19) / 18, (h - 15 - 19) / 18));
+    tbl.style.setProperty('--cell', Math.max(13, Math.min(34, c)) + 'px');
+    wrap.style.overflow = c < 13 ? 'auto' : '';      // pantalla muy baja: que se pueda desplazar
   }
 
   function paintChart() {
