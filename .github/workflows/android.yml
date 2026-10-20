@@ -27,6 +27,9 @@ jobs:
       - name: Install build tools
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Build game (js/app.min.js)
+        run: node tools/build.js --sin-seo
+
       - name: Prepare Android project
         run: |
           mkdir -p app/src/main/assets app/src/main/java/com/example/pokesurvivor
