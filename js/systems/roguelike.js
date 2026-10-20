@@ -3,9 +3,11 @@
  * mecánica es la de siempre, con pisos por encima:
  *
  *   - Cada piso dura FLOOR_LEN segundos. Al pasar al siguiente sale el aviso
- *     «Piso N» y los enemigos son un poco más duros y numerosos.
+ *     «Piso N», te curas un poco y los enemigos son algo más duros y numerosos.
+ *     Este modo parte de enemigos más flojos y escasos que los de la carrera
+ *     normal (ver los *_BASE de abajo) y sube despacio.
  *   - Cada BOSS_EVERY pisos aparece un jefe (en vez de los del reloj normal).
- *   - Cada CARD_EVERY pisos superados, tres cartas de rareza a elegir
+ *   - Cada CARD_EVERY pisos superados (ahora, cada piso), tres cartas de rareza a elegir
  *     (Común, Rara, Épica, Legendaria), además de las cartas de nivel de siempre.
  *     Cuanto más alto el piso, más fácil que salgan las mejores. Las épicas y
  *     legendarias dan varias mejoras a la vez. En un piso de jefe, siempre sale
@@ -16,9 +18,12 @@
  */
 G.Roguelike = (() => {
   const FLOOR_LEN = 75;                // segundos por piso
-  const CARD_EVERY = 3;                // cartas de rareza cada N pisos superados
+  const CARD_EVERY = 1;                // cartas de rareza cada N pisos superados
   const BOSS_EVERY = 5;                // un jefe cada N pisos
-  const HP_PER_FLOOR = 0.07, DMG_PER_FLOOR = 0.04, RATE_PER_FLOOR = 0.04;   // dificultad extra por piso
+  // Dificultad: 1 = como la carrera normal. Se parte de menos y se sube por piso.
+  const HP_BASE = 0.65, DMG_BASE = 0.6, RATE_BASE = 0.65;                   // punto de partida (piso 1)
+  const HP_PER_FLOOR = 0.05, DMG_PER_FLOOR = 0.03, RATE_PER_FLOOR = 0.03;   // dificultad extra por piso
+  const HEAL_ON_FLOOR = 0.35;          // vida que se recupera (fracción de la máxima) al pasar de piso
 
   let active = false, floor = 1, due = 0, bossDue = 0;
 
@@ -68,6 +73,8 @@ G.Roguelike = (() => {
       if (floor % BOSS_EVERY === 0) bossDue++;
       G.Spawner.say('Piso ' + floor, 2.6, true);
       G.Audio.sfx('select');
+      const pl = G.Game.player;
+      if (pl && !pl.dead) pl.heal(Math.round(pl.maxHp * HEAL_ON_FLOOR));
     }
   }
 
@@ -112,7 +119,7 @@ G.Roguelike = (() => {
     bossDue = Math.max(0, s.bossDue | 0);
   }
 
-  const k = per => active ? 1 + per * (floor - 1) : 1;
+  const k = (base, per) => active ? base + per * (floor - 1) : 1;
 
   return {
     reset, update, offer, takeBoss, exportRun, importRun,
@@ -120,7 +127,7 @@ G.Roguelike = (() => {
     get floor() { return floor; },
     get due() { return due; },
     set due(v) { due = v; },
-    hpK: () => k(HP_PER_FLOOR), dmgK: () => k(DMG_PER_FLOOR), rateK: () => k(RATE_PER_FLOOR),
+    hpK: () => k(HP_BASE, HP_PER_FLOOR), dmgK: () => k(DMG_BASE, DMG_PER_FLOOR), rateK: () => k(RATE_BASE, RATE_PER_FLOOR),
     FLOOR_LEN, CARD_EVERY, BOSS_EVERY
   };
 })();
