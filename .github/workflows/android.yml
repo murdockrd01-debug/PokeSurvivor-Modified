@@ -9,7 +9,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Download source
         uses: actions/checkout@v4
@@ -24,6 +23,7 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+
       - name: Install build tools
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
@@ -39,43 +39,53 @@ jobs:
           cp -r js app/src/main/assets/ 2>/dev/null || true
           cp -r images app/src/main/assets/ 2>/dev/null || true
           cp -r sounds app/src/main/assets/ 2>/dev/null || true
+
+          # Icono de la app: se toma SIEMPRE de assets/icons/icon-512.png del repo
+          test -f assets/icons/icon-512.png || { echo "Falta assets/icons/icon-512.png"; exit 1; }
+          mkdir -p app/src/main/res/mipmap-xxxhdpi
+          cp assets/icons/icon-512.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+
           cat > settings.gradle <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
           rootProject.name = "PokeSurvivor"
           include ':app'
           EOF
+
           cat > build.gradle <<'EOF'
           plugins {
-              id 'com.android.application' version '8.6.1' apply false
+            id 'com.android.application' version '8.6.1' apply false
           }
           EOF
+
           cat > app/build.gradle <<'EOF'
           plugins { id 'com.android.application' }
           android {
-              namespace 'com.example.pokesurvivor'
-              compileSdk 35
-              defaultConfig {
-                  applicationId 'com.example.pokesurvivor'
-                  minSdk 23
-                  targetSdk 28
-                  versionCode ${{ github.run_number }}
-                  versionName '1.0.${{ github.run_number }}'
-              }
+            namespace 'com.example.pokesurvivor'
+            compileSdk 35
+            defaultConfig {
+              applicationId 'com.example.pokesurvivor'
+              minSdk 23
+              targetSdk 28
+              versionCode ${{ github.run_number }}
+              versionName '1.0.${{ github.run_number }}'
+            }
           }
           EOF
+
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="PokeSurvivor" android:usesCleartextTraffic="true">
-                  <activity android:name=".MainActivity" android:screenOrientation="landscape" android:exported="true">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-                  </activity>
-              </application>
+            <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="PokeSurvivor" android:usesCleartextTraffic="true">
+              <activity android:name=".MainActivity" android:screenOrientation="landscape" android:exported="true">
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN"/>
+                  <category android:name="android.intent.category.LAUNCHER"/>
+                </intent-filter>
+              </activity>
+            </application>
           </manifest>
           EOF
+
           cat > app/src/main/java/com/example/pokesurvivor/MainActivity.java <<'EOF'
           package com.example.pokesurvivor;
           import android.app.Activity;
@@ -84,37 +94,37 @@ jobs:
           import android.webkit.WebSettings;
           import android.view.View;
           public class MainActivity extends Activity {
-              private WebView w;
-              @Override public void onCreate(Bundle b) {
-                  super.onCreate(b);
-                  getWindow().getDecorView().setSystemUiVisibility(5894 | 1024 | 512);
-                  w = new WebView(this);
-                  WebSettings s = w.getSettings();
-                  s.setJavaScriptEnabled(true);
-                  s.setDomStorageEnabled(true);
-                  w.setWebViewClient(new android.webkit.WebViewClient());
-                  setContentView(w);
-                  w.loadUrl("file:///android_asset/index.html");
-              }
-              // Silencia el juego (Web Audio) al salir de la app y lo reanuda al volver.
-              private void bgAudio(boolean pause) {
-                  if (w == null) return;
-                  w.evaluateJavascript("window.PSAudioBg&&window.PSAudioBg." + (pause ? "pause" : "resume") + "()", null);
-              }
-              @Override protected void onPause() {
-                  bgAudio(true);
-                  if (w != null) w.onPause();
-                  super.onPause();
-              }
-              @Override protected void onResume() {
-                  super.onResume();
-                  if (w != null) w.onResume();
-                  bgAudio(false);
-              }
-              @Override protected void onDestroy() {
-                  if (w != null) { w.destroy(); w = null; }
-                  super.onDestroy();
-              }
+            private WebView w;
+            @Override public void onCreate(Bundle b) {
+              super.onCreate(b);
+              getWindow().getDecorView().setSystemUiVisibility(5894 | 1024 | 512);
+              w = new WebView(this);
+              WebSettings s = w.getSettings();
+              s.setJavaScriptEnabled(true);
+              s.setDomStorageEnabled(true);
+              w.setWebViewClient(new android.webkit.WebViewClient());
+              setContentView(w);
+              w.loadUrl("file:///android_asset/index.html");
+            }
+            // Silencia el juego (Web Audio) al salir de la app y lo reanuda al volver.
+            private void bgAudio(boolean pause) {
+              if (w == null) return;
+              w.evaluateJavascript("window.PSAudioBg&&window.PSAudioBg." + (pause ? "pause" : "resume") + "()", null);
+            }
+            @Override protected void onPause() {
+              bgAudio(true);
+              if (w != null) w.onPause();
+              super.onPause();
+            }
+            @Override protected void onResume() {
+              super.onResume();
+              if (w != null) w.onResume();
+              bgAudio(false);
+            }
+            @Override protected void onDestroy() {
+              if (w != null) { w.destroy(); w = null; }
+              super.onDestroy();
+            }
           }
           EOF
 
